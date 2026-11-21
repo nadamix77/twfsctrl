@@ -1,0 +1,96 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (contains secrets - never commit!)
+.env
+.env.*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# database (SQLite local dev)
+prisma/*.db
+prisma/*.db-journal
+
+# logs
+*.log
+dev.log
+dev.out.log
+server.log
+
+# local / IDE
+local-*
+.claude
+.z-ai-config
+.vscode/
+.idea/
+
+# skills
+/skills/
+
+# sandbox
+download/
+
+# uploads (temporary pasted images)
+upload/
+
+# agent tool caches
+tool-results/
+agent-ctx/
+
+# sandbox-specific scripts & infrastructure
+.zscripts/
+lib-symlinks/
+start-dev.sh
+start-pg.mjs
+watchdog-dev.sh
+
+# sandbox-specific packages
+*.deb
+
+# agent artifacts
+page-screenshot.png
+
+# controller (generated Prisma client)
+src/generated/
+
+# reference clone (read-only — never edit or track)
+tweetfess/
+
+# local embedded postgres (dev database service)
+mini-services/postgres-service/pgdata/
+mini-services/postgres-service/postgres.log

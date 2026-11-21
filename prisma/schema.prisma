@@ -1,0 +1,82 @@
+// ============================================================
+// prisma/schema.prisma — Tweetfess Controller database
+// (docs/PRD-CONTROLLER.md §9, docs/DATA-MODEL.md)
+//
+// The controller owns EXACTLY two concerns: the instance registry
+// (with encrypted credentials) and the audit log. No submissions,
+// no settings, no end-user PII — instances stay the source of truth.
+//
+// PostgreSQL (Supabase in production — docs/DEPLOYMENT.md; a local
+// embedded Postgres in development via mini-services/postgres-service).
+// No Prisma enums by design — the schema stays provider-portable
+// (e.g. back to SQLite) should a deployment need it. No raw SQL is
+// used against this schema.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/controller-client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Prisma-native pooled/unpooled split (docs/DEPLOYMENT.md §1):
+  //   url       — RUNTIME (Prisma Client in Next.js): pooled URI.
+  //               Serverless/Vercel = Supabase transaction pooler
+  //               (port 6543, ?pgbouncer=true&connection_limit=1);
+  //               VPS/long-running = direct connection is fine.
+  //   directUrl — SCHEMA OPS (prisma db push / studio): direct or
+  //               session-pooler URI (port 5432). Advisory locks and
+  //               prepared statements do not survive transaction
+  //               pooling, so the CLI must NOT go through the
+  //               transaction pooler.
+  // Local dev: both point at the same embedded Postgres (no pooler).
+  // Prisma generate does not resolve either variable — CI/Vercel
+  // builds run without them.
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// NOTE: no Prisma enums — kept out by design so the schema stays
+// provider-portable (values are plain strings; the allowed sets are
+// documented in docs/DATA-MODEL.md).
+
+model Instance {
+  id        String   @id @default(cuid())
+  name      String   @unique // display name, e.g. "twfs"
+  baseUrl   String   @unique // normalized: https://host[:port], no trailing slash
+  handle    String? // menfess X handle, display only
+  colorTag  String? // hex color for badges
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  credential InstanceCredential?
+  auditLogs  AuditLog[]
+}
+
+model InstanceCredential {
+  instanceId      String   @id
+  instance        Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  encryptedSecret String // AES-256-GCM "iv:authTag:ciphertext" of the instance ADMIN_PASSWORD
+  updatedAt       DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  instanceId  String? // null for controller-level actions
+  // Denormalized display name — survives instance deletion (onDelete:
+  // SetNull drops the FK but history stays readable).
+  instanceName String?
+  instance    Instance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  action      String // e.g. "instance.create", "submission.approve"
+  targetId    String? // instance-side submission id when applicable
+  outcome     String // "success" | "error"
+  detail      String? // instance error string / outcome nuance (no submission content)
+  actorIp     String
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([instanceId, createdAt])
+}

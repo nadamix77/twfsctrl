@@ -1,0 +1,10 @@
+{
+  "name": "tweetfess-instance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tweetfess instance simulator implementing the documented Instance API contract (docs/INSTANCE-API.md) — used to E2E-verify the Controller against a faithful instance",
+  "scripts": {
+    "dev": "bun --hot run index.ts",
+    "start": "bun run index.ts"
+  }
+}

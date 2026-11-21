@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "postgres-service",
+      "dependencies": {
+        "@embedded-postgres/linux-x64": "^17.5.0-beta.15",
+      },
+    },
+  },
+  "trustedDependencies": [
+    "@embedded-postgres/linux-x64",
+  ],
+  "packages": {
+    "@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@17.5.0-beta.15", "", { "os": "linux", "cpu": "x64" }, "sha512-Kf5yATvzPLcNlb8ZBtS/aEaTWeM682rCnPBJW5T11b2iKzEO6qpOzfA2UuZhffEansYzxIoSyHk7jFp+q7rHYA=="],
+  }
+}

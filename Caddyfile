@@ -1,0 +1,31 @@
+:81 {
+	# Hard request-body cap (D-7). Matches the app-level gate in
+	# api/submissions/_lib.ts (MAX_REQUEST_BODY_BYTES = 5242880). The
+	# app gate only sees honest content-length headers; this cap bounds
+	# chunked and lying-header requests too.
+	request_body {
+		max_size 5242880
+	}
+
+	@transform_port_query {
+		query XTransformPort=*
+	}
+
+	handle @transform_port_query {
+		reverse_proxy localhost:{query.XTransformPort} {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy localhost:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}

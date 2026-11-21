@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        # postinstall runs `prisma generate` (controller client into
+        # src/generated/controller-client — gitignored)
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+        env:
+          # Build-time placeholders — real secrets are only needed at
+          # runtime (login refuses to start without them, by design).
+          # prisma generate resolves neither URL (no DB at build time).
+          ADMIN_PASSWORD: ci-placeholder
+          SESSION_SECRET: ci-placeholder
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/controller
+          DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/controller

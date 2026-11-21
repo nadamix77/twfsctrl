@@ -1,0 +1,234 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   CERAH DESIGN TOKENS — tweetfess v2 light-only design system
+   (source of truth: uiux repo, boards light-1..light-7)
+   Light-only by design; the app ships no dark toggle.
+   v2.2: cool-grey neutral ramp. Page = cool grey; white cards
+   lift on --shadow (Tier 1) / --shadow-sm (Tier 2); info wells
+   sit flat on surface-2 (Tier 3). ink-3 is AA (≥4.5:1) on every
+   text surface: white / bg / surface-2 / surface-3.
+   ============================================================ */
+:root {
+  color-scheme: light;
+
+  /* Core palette — cool grey ladder (B>G>R throughout) */
+  --bg: #F2F4F5;
+  --surface: #FFFFFF;
+  --surface-2: #E8EBED;
+  --surface-3: #E3E8EA;
+  --line: #E0E4E8;
+  --line-soft: #E7EAEC;
+  --ink: #0F1419;
+  --ink-2: #536471;
+  --ink-3: #5C6973;
+  --ink-hover: #272C30;
+
+  /* Purple brand accent (Cerah v2) */
+  --accent: #6D28D9;
+  --accent-strong: #5B21B6;
+  --accent-soft: #F1EAFE;
+  --accent-line: #DCCDF8;
+  --accent-glow: rgba(109, 40, 217, 0.10);
+
+  /* Wordmark dot — the orange period in the "tweetfess." header logo */
+  --logo-dot: #F6511D;
+
+  /* Semantic: amber */
+  --amber: #8A5A00;
+  --amber-strong: #B45309;
+  --amber-deep: #92400E;
+  --amber-soft: #FFF4D6;
+  --amber-line: #EAD9A8;
+
+  /* Semantic: green — strong/deep ladder mirrors amber (strong = vivid
+     accent tone; deep = the AA hover pair under white text). */
+  --green: #047857;
+  --green-strong: #00A97A;
+  --green-deep: #04543E;
+  --green-soft: #E2F7EE;
+  --green-line: #B9E7D4;
+
+  /* Semantic: red */
+  --red: #B3212E;
+  --red-strong: #E02839;
+  --red-soft: #FCE7E9;
+  --red-line: #F3C4C9;
+
+  /* X links (AA-safe ink variant for text on light surfaces) */
+  --xblue-ink: #0B6CA8;
+  --xblue-soft: #E3F2FB;
+  --xblue-line: #B9DCF2;
+
+  /* Orange (censor status) */
+  --orange: #9A3412;
+  --orange-soft: #FFEDD5;
+  --orange-line: #F2C49A;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.05);
+  --shadow: 0 1px 2px rgba(15, 20, 25, 0.05), 0 8px 24px rgba(15, 20, 25, 0.07);
+  --shadow-lg: 0 2px 4px rgba(15, 20, 25, 0.06), 0 16px 40px rgba(15, 20, 25, 0.10);
+}
+
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--ink);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-hover: var(--ink-hover);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-ring: var(--accent);
+  --color-input: var(--line);
+  --color-border: var(--line);
+
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+
+  --color-primary: var(--ink);
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--ink-2);
+  --color-accent: var(--surface-2);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--red);
+
+  /* Cerah semantic scales exposed as Tailwind colors */
+  --color-brand: var(--accent);
+  --color-brand-strong: var(--accent-strong);
+  --color-brand-soft: var(--accent-soft);
+  --color-brand-line: var(--accent-line);
+  --color-logo-dot: var(--logo-dot);
+  --color-cerah-amber: var(--amber);
+  --color-cerah-amber-strong: var(--amber-strong);
+  --color-cerah-amber-deep: var(--amber-deep);
+  --color-cerah-amber-soft: var(--amber-soft);
+  --color-cerah-amber-line: var(--amber-line);
+  --color-cerah-green: var(--green);
+  --color-cerah-green-strong: var(--green-strong);
+  --color-cerah-green-deep: var(--green-deep);
+  --color-cerah-green-soft: var(--green-soft);
+  --color-cerah-green-line: var(--green-line);
+  --color-cerah-red: var(--red);
+  --color-cerah-red-strong: var(--red-strong);
+  --color-cerah-red-soft: var(--red-soft);
+  --color-cerah-red-line: var(--red-line);
+  --color-cerah-ink-2: var(--ink-2);
+  --color-cerah-bg: var(--bg);
+  --color-cerah-surface-2: var(--surface-2);
+  --color-cerah-surface-3: var(--surface-3);
+  --color-xblue-ink: var(--xblue-ink);
+  --color-xblue-soft: var(--xblue-soft);
+  --color-xblue-line: var(--xblue-line);
+  --color-cerah-orange: var(--orange);
+  --color-cerah-orange-soft: var(--orange-soft);
+  --color-cerah-orange-line: var(--orange-line);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  /* Card = 16px (rounded-2xl), dialogs/inner panels = 12px */
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    background-color: var(--bg);
+    background-image: radial-gradient(
+      900px 380px at 50% -140px,
+      var(--accent-glow),
+      transparent 70%
+    );
+    background-repeat: no-repeat;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* WCAG 2.2 SC 2.4.11: keep Tab-focused elements clear of the 60px
+     sticky header (4.5rem = header band + breathing room). */
+  html {
+    scroll-padding-top: 4.5rem;
+  }
+}
+
+@layer utilities {
+  .animate-spin-reverse {
+    animation: spin-reverse 1s linear infinite;
+  }
+  /* Shimmer skeleton (Cerah) */
+  .cerah-skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-3) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: cerah-shimmer 1.4s infinite;
+  }
+  /* Soft opacity pulse — countdown dots, stale-banner dots (Cerah) */
+  .animate-softpulse {
+    animation: softpulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes spin-reverse {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+
+@keyframes cerah-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@keyframes softpulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+@keyframes toast-drain {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cerah-skeleton { animation: none; }
+  .animate-softpulse { animation: none; }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
