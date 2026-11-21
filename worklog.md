@@ -4,6 +4,46 @@ Catatan kerja kronologis untuk repo ini. Hanya pekerjaan controller — sejarah 
 
 ---
 
+## 2026-11-21 — Port seluruh fitur admin Tweetfess ke controller (Pengirim / Pembayaran / Pengaturan / AI / Analitik)
+
+### 1. Simulator instance diperluas (kontrak tetap satu sumber: docs/INSTANCE-API.md)
+
+`mini-services/tweetfess-instance/index.ts` (770 → ~1790 baris): endpoint admin yang belum diimplementasikan ditambahkan setia pada dokumen — `GET /api/admin/submitters` (+ `block`/`unblock`/`whitelist`/`image-post-allowlist`/`overrides`/`points-adjust`), `GET /api/admin/payments` (+ `confirm`/`void`/`ambiguous/:refId/dismiss`), `GET|POST|DELETE /api/admin/settings` (16 kunci valid, GET ter-mask), `GET|POST /api/admin/filter-settings` (merge per-grup + validasi bounds), `GET /api/admin/ai-status`, `GET /api/admin/ai-stats`, `GET /api/admin/analytics` (preset today/7d/30d/month + span kustom ≤366 hari, bucket hari WIB). 21 counter baru di `/api/dev/state`; route lama tak tersentuh; `filterSettings`/`FILTER_GROUP_SNAKE` jadi `Map` (idiom SAST anti object-injection). Diverifikasi penuh lewat curl (semua jalur sukses + 400/404/409) oleh subagent.
+
+### 2. Sisi controller — kontrak + lib + 8 route baru
+
+- `src/lib/controller/types.ts`: kontrak SubmitterItem/SubmittersSection (+`flagsKnown`), PaymentOrder/PaymentsSection/UnmatchedCredit, SettingsSnapshot/FilterSettingsSnapshot/AiSnapshot/AnalyticsSnapshot, union aksi `SubmitterAction`/`PaymentAction`.
+- `src/lib/controller/parse.ts` (baru): pembaca defensif NFR-X1 (readNum/Str/Bool/Iso/StrArray/NumRecord + readPagination multi-ejaan).
+- `src/lib/controller/submitters.ts` (baru): fan-out `/api/admin/submitters` + cross-ref `/api/admin/filter-settings` (ID list → flag blocked/whitelisted/imageAllowed, page 1 saja) + tabel aksi (DELETE-with-body untuk whitelist/allowlist).
+- `src/lib/controller/payments.ts` (baru): fan-out `/api/admin/payments` (orders + revenue + blok gobiz: health/refresh/orphans/ambiguous) + aksi confirm (note wajib, refId opsional)/void/dismiss.
+- `src/lib/controller/instance-admin.ts` (baru): proxy per-instance settings (upsert/delete), filter-settings (GET parse defensif + POST patch), AI (status+stats paralel, degradasi independen), analytics (range preset).
+- Route: `GET /api/controller/submitters`, `POST /api/controller/submitters/[instanceId]/[action]`, `GET /api/controller/payments`, `POST /api/controller/payments/[instanceId]/[action]`, `GET|POST|DELETE /api/controller/settings/[instanceId]`, `GET|POST /api/controller/filter-settings/[instanceId]`, `GET /api/controller/ai/[instanceId]`, `GET /api/controller/analytics/[instanceId]` — semua `withControllerAuth` + audit `submitter.*`/`payment.*`/`settings.*`/`filter.update` (targetId = username/orderId/refId/key/group-names; note & alasan TIDAK pernah masuk audit, FR-F2). Prisma schema tidak berubah (tidak perlu db:push).
+- `log.ts`: namespace debug baru `controller:submitters`/`controller:payments`.
+
+### 3. Sisi UI — 4 view + dialog Pengaturan
+
+- `dashboard.tsx`: tab view Ringkasan | Pengirim | Pembayaran | Analitik (nav aria, wrapper scroll-x mobile — bug overflow 390px ditemukan & diperbaiki saat verifikasi).
+- `submitters-panel.tsx` (baru): chip instance + search debounce + baris dengan badge Diblokir/Whitelist/Izin gambar/Limit khusus/Harga khusus + menu aksi (Blokir… dengan alasan, whitelist, izin gambar, dialog Override Limit & Harga 7+3 field, dialog Sesuaikan Poin delta+note wajib).
+- `payments-panel.tsx` (baru): tab status + kartu ringkasan per-instance (revenue + badge GoBiz) + baris order (Konfirmasi…/Batalkan untuk pending) + blok kredit ambigu (Abaikan) + kredit yatim (display-only).
+- `analytics-panel.tsx` (baru): preset rentang + strip agregat + kartu per-instance (6 tile, funnel, paket top-up, leaderboard, alasan tolak, kelas kegagalan); tile Pendapatan tanpa prefiks "Rp" + tooltip nilai persis (aturan compact-rounds).
+- `instance-settings-dialog.tsx` (baru): 3 tab — Kredensial & X (list masked + tambah/perbaru/hapus 16 kunci), Filter (switch + textarea kata + prompt AI + mode gambar + batas/CB/monetisasi; patch hanya grup berubah), AI (health penyedia + Periksa ulang + tabel statistik fase×provider). Dibuka dari menu kartu instance ("Pengaturan Instance").
+- `use-instance-sections.ts` (baru): state machine sections generik (doktrin use-controller-queue: page-1 refetch, loadMore merge+dedupe, refresh 1..N, slice beku FR-D11) — dipakai Pengirim & Pembayaran.
+- Idiom lint yang dipegang: Map/entries+fromEntries (anti object-injection), `const run = async () => {}` + `void run()` dalam efek (anti set-state-in-effect + narrowing), DialogFooter lokal (ui/dialog tak mengekspor footer).
+
+### Verifikasi
+
+- `bun run lint` 0 error 0 warning; `bunx tsc --noEmit` 0 error.
+- Browser E2E (agent-browser, login → semua view): blokir @neneng_t (badge muncul) → buka blokir (badge hilang); points-adjust @dimas_p −3 → toast "Saldo sekarang 1 poin"; override @ditaaa (badge Limit khusus tetap); konfirmasi ord_002 + note + refId gobiz:TXN200 → "Order dikonfirmasi" (validasi note kosong ditolak dulu); void ord_003; dismiss ambigu TXN777 → blok hilang; Pengaturan: simpan post_method=twitterapi (mask "twi***api"), hapus require_follow (baris hilang), Filter: autoApprove on + blockedWords + submissionDailyCap 30 → terverifikasi di simulator (`autoApprove: true`), AI: 2 penyedia + tabel text/vision + Periksa ulang.
+- Audit trail: `filter.update autoApprove,blockedWords,rateLimits success`, `settings.save/delete`, `payment.confirm/void/dismiss`, `submitter.block/unblock/points-adjust (balance=1)/overrides` — semua success, tanpa konten bebas.
+- dev.log: seluruh panggilan route baru 200 (nol 4xx/5xx setelah fix); overflow mobile diperbaiki (scrollW 390 == viewport); VLM: layout bersih, tile satu baris penuh.
+- Simulator di-reseed segar (touch → hot reload) pasca-verifikasi.
+
+### Status akhir hari
+
+- Semua fitur admin instance (moderasi, pengirim, monetisasi, pengaturan kredensial, filter, AI, analitik, maintenance) kini dapat dijalankan dari satu panel controller; audit & slice-beku menyusul pola Epic D/F.
+
+---
+
 ## 2026-11-21 — Ekstraksi repo + PostgreSQL + rename env
 
 ### 1. Ekstraksi controller menjadi repo standalone (ADR-016)

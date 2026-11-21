@@ -8,8 +8,9 @@ import type { QueueStatusFilter } from '@/lib/controller/types'
 // GET /api/controller/queue — Unified moderation queue fan-out (Epic D)
 //
 // Query params:
-//   status    one of all|pending|censored|post_failed|rejected (default all;
-//             rejected is the FR-D8 refund tab — 'all' stays reviewable-only)
+//   status    one of all|pending|censored|posting|post_failed|rejected|
+//             posted (default all; rejected is the FR-D8 refund tab, posting
+//             and posted are live/history tabs — 'all' stays reviewable-only)
 //   page      integer 1–100 (default 1)
 //   limit     integer ≥1, clamped to QUEUE_PAGE_LIMIT (default 50)
 //   search    free text, trimmed, ≤100 chars (delegated per instance)
@@ -26,7 +27,10 @@ const SEARCH_MAX = 100
 /** Whitelist parse — literal comparisons only. */
 function parseStatusFilter(raw: string | null): QueueStatusFilter | null {
   if (raw === null || raw === '') return 'all'
-  if (raw === 'all' || raw === 'pending' || raw === 'censored' || raw === 'post_failed' || raw === 'rejected') return raw
+  if (
+    raw === 'all' || raw === 'pending' || raw === 'censored' || raw === 'posting' ||
+    raw === 'post_failed' || raw === 'rejected' || raw === 'posted'
+  ) return raw
   return null
 }
 

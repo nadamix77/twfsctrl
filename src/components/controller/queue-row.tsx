@@ -159,6 +159,12 @@ export function QueueRow({
   const isRejected = item.status === 'rejected'
   const busy = busyAction != null
 
+  // Read-only rows (live `posting` / history `posted` tabs): the instance
+  // refuses approve/reject/retry from these statuses (400/409) and delete
+  // too (409 while in-flight; posted is terminal — the tweet is live on X
+  // and can't be undone). These rows are visibility-only.
+  const readOnly = item.status === 'posting' || item.status === 'posted'
+
   // ── Envelope handling ────────────────────────────────
 
   const handleEnvelopeError = useCallback((envelope: QueueActionResponse) => {
@@ -509,7 +515,10 @@ export function QueueRow({
             </Button>
           )}
 
-          {/* Delete — behind a confirm (FR-D7) */}
+          {/* Delete — behind a confirm (FR-D7); hidden on read-only
+              posting/posted rows (instance answers 409 — in-flight /
+              terminal). */}
+          {!readOnly && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
@@ -543,6 +552,7 @@ export function QueueRow({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          )}
         </div>
       </div>
     </motion.li>

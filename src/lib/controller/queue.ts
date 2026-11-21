@@ -1,10 +1,11 @@
 // ============================================================
 // queue.ts — Unified moderation queue fan-out (Epic D)
 //
-// Merged view of reviewable submissions (pending / censored /
-// post_failed) from every ENABLED instance. The 'all' tab performs
-// three parallel per-instance calls (one per status) so pagination
-// stays per-status-correct; specific tabs perform one. Sections are
+// Merged view of submissions from every ENABLED instance. The 'all'
+// tab performs three parallel per-instance calls over the reviewable
+// statuses (pending / censored / post_failed) so pagination stays
+// per-status-correct; specific tabs — including the live 'posting'
+// (in-flight to X) and history 'posted' tabs — perform one. Sections are
 // per-instance so a degraded instance freezes its OWN slice only
 // (FR-D11) while the client flattens + sorts by createdAt desc.
 //

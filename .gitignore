@@ -94,3 +94,4 @@ tweetfess/
 # local embedded postgres (dev database service)
 mini-services/postgres-service/pgdata/
 mini-services/postgres-service/postgres.log
+package-lock.json

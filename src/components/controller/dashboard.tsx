@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Plus } from 'lucide-react'
+import { AlertTriangle, BarChart3, LayoutGrid, Plus, Users, Wallet } from 'lucide-react'
 import type { InstanceDto } from '@/lib/controller/types'
 import { Button } from '@/components/ui/button'
 import { useControllerOverview } from '@/hooks/use-controller-overview'
@@ -11,7 +11,12 @@ import { InstanceCard } from './instance-card'
 import { InstanceDialog, type InstanceDialogTarget } from './instance-dialog'
 import { DeleteInstanceDialog } from './delete-instance-dialog'
 import { QueuePanel } from './queue-panel'
+import { SubmittersPanel } from './submitters-panel'
+import { PaymentsPanel } from './payments-panel'
+import { AnalyticsPanel } from './analytics-panel'
+import { InstanceSettingsDialog } from './instance-settings-dialog'
 import { AuditDialog } from './audit-dialog'
+import { cn } from '@/lib/core/utils'
 
 // ============================================================
 // dashboard.tsx — the composition root of the authenticated panel
@@ -28,6 +33,18 @@ interface DashboardProps {
   /** Session re-check (fired when any API answers 401 mid-panel). */
   onSessionExpired: () => void
 }
+
+/** Top-level views — Ringkasan keeps the overview + queue; the other
+ *  tabs are the ported Tweetfess admin surfaces (per-instance actions
+ *  stay on their rows / the Pengaturan dialog). */
+type PanelView = 'ringkasan' | 'pengirim' | 'pembayaran' | 'analitik'
+
+const PANEL_VIEWS: ReadonlyArray<{ value: PanelView; label: string; icon: typeof LayoutGrid }> = [
+  { value: 'ringkasan', label: 'Ringkasan', icon: LayoutGrid },
+  { value: 'pengirim', label: 'Pengirim', icon: Users },
+  { value: 'pembayaran', label: 'Pembayaran', icon: Wallet },
+  { value: 'analitik', label: 'Analitik', icon: BarChart3 },
+]
 
 export function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
   const overview = useControllerOverview({ onUnauthorized: onSessionExpired })
@@ -71,6 +88,10 @@ export function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
   const [deleteTarget, setDeleteTarget] = useState<InstanceDto | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
+  const [settingsTarget, setSettingsTarget] = useState<InstanceDto | null>(null)
+
+  // Active view (the ported Tweetfess surfaces)
+  const [view, setView] = useState<PanelView>('ringkasan')
 
   const openCreate = useCallback(() => {
     setInstanceDialogTarget({ mode: 'create' })
@@ -95,22 +116,55 @@ export function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
       />
 
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
+        {/* View tabs — the ported Tweetfess surfaces (Pengirim /
+            Pembayaran / Analitik) + the original Ringkasan. The wrapper
+            scrolls on narrow screens (the queue status-tabs idiom). */}
+        <nav aria-label="Bagian panel" className="-mx-1 overflow-x-auto px-1 pb-0.5">
+          <div
+            role="group"
+            aria-label="Pilih bagian"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-line bg-cerah-surface-2 p-0.5"
+          >
+            {PANEL_VIEWS.map((panel) => {
+              const active = view === panel.value
+              return (
+                <button
+                  type="button"
+                  key={panel.value}
+                  onClick={() => { setView(panel.value) }}
+                  aria-pressed={active}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md px-3 text-xs font-medium whitespace-nowrap transition-[color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    active ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:bg-surface/60 hover:text-ink',
+                  )}
+                >
+                  <panel.icon className="size-3.5" aria-hidden />
+                  {panel.label}
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+
         {/* Stale-data banner — the fan-out failed but the last payload stays */}
-        {overview.error != null && (
+        {view === 'ringkasan' && overview.error != null && (
           <p role="alert" className="m-0 flex items-start gap-1.5 rounded-lg border border-cerah-red-line bg-cerah-red-soft px-3 py-2 text-xs leading-relaxed text-cerah-red">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             Gagal memuat ringkasan: {overview.error}
             {overview.data != null ? ' — menampilkan data terakhir.' : ''}
           </p>
         )}
-        {registryError != null && (
+        {view !== 'ringkasan' && registryError != null && (
           <p role="alert" className="m-0 flex items-start gap-1.5 rounded-lg border border-cerah-red-line bg-cerah-red-soft px-3 py-2 text-xs leading-relaxed text-cerah-red">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             Gagal memuat daftar instance: {registryError}
           </p>
         )}
 
-        {/* ── Overview grid (Epic C) ── */}
+        {view === 'ringkasan' && (
+          <>
+            {/* ── Overview grid (Epic C) ── */}
         <section aria-labelledby="instances-title" className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -161,6 +215,7 @@ export function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
                   overview={card}
                   onChanged={afterRegistryChange}
                   onEdit={openEdit}
+                  onSettings={(target) => { setSettingsTarget(target) }}
                   onDelete={(instance) => {
                     setDeleteTarget(instance)
                     setDeleteOpen(true)
@@ -173,6 +228,18 @@ export function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
 
         {/* ── Unified queue (Epic D) ── */}
         <QueuePanel instances={instances} onUnauthorized={onSessionExpired} reloadSignal={reloadSignal} />
+          </>
+        )}
+
+        {view === 'pengirim' && (
+          <SubmittersPanel instances={instances} onUnauthorized={onSessionExpired} />
+        )}
+        {view === 'pembayaran' && (
+          <PaymentsPanel instances={instances} onUnauthorized={onSessionExpired} />
+        )}
+        {view === 'analitik' && (
+          <AnalyticsPanel instances={instances} onUnauthorized={onSessionExpired} />
+        )}
       </main>
 
       {/* ── Dialogs (state lifted here) ── */}
@@ -187,6 +254,12 @@ export function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         onDeleted={afterRegistryChange}
+      />
+      <InstanceSettingsDialog
+        instance={settingsTarget}
+        open={settingsTarget != null}
+        onOpenChange={(open) => { if (!open) setSettingsTarget(null) }}
+        onUnauthorized={onSessionExpired}
       />
       <AuditDialog open={auditOpen} onOpenChange={setAuditOpen} instances={instances} />
     </>

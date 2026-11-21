@@ -19,6 +19,8 @@ function namespacesEnabled(): Set<string> {
       enabled.add('controller:queue')
       enabled.add('controller:auth')
       enabled.add('controller:registry')
+      enabled.add('controller:submitters')
+      enabled.add('controller:payments')
     }
   }
   return enabled
@@ -30,7 +32,15 @@ const enabled = namespacesEnabled()
  *  `no-console` stays active everywhere else). */
 const consoleRef = console
 
-export function controllerDebug(ns: 'controller:fanout' | 'controller:queue' | 'controller:auth' | 'controller:registry', ...args: unknown[]): void {
+export type ControllerDebugNs =
+  | 'controller:fanout'
+  | 'controller:queue'
+  | 'controller:auth'
+  | 'controller:registry'
+  | 'controller:submitters'
+  | 'controller:payments'
+
+export function controllerDebug(ns: ControllerDebugNs, ...args: unknown[]): void {
   if (enabled.has(ns)) consoleRef.log(`[${ns}]`, ...args)
 }
 

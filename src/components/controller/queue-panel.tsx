@@ -35,7 +35,35 @@ const STATUS_TABS: ReadonlyArray<{ value: QueueStatusFilter; label: string; coun
   // FR-D8: rejected rows surface the manual "Kembalikan Poin" refund
   // action; 'all' intentionally stays reviewable-only (PRD §5.1).
   { value: 'rejected', label: 'Ditolak', countKey: 'rejected' },
+  // Live/history tabs: `posting` shows submissions currently in flight
+  // to X, `posted` the successfully posted history with tweet links.
+  // Rows there are read-only (the instance refuses mutations from
+  // those statuses) — visibility only.
+  { value: 'posting', label: 'Posting', countKey: 'posting' },
+  { value: 'posted', label: 'Diposting', countKey: 'posted' },
 ]
+
+/** Tabs whose rows are never part of the reviewable "all" fetch —
+ *  their counts would always mislead as 0 outside their own tab. */
+const NOT_IN_ALL_TABS = new Set<QueueStatusFilter>(['rejected', 'posting', 'posted'])
+
+/** Empty-state copy for the non-reviewable tabs (reviewable tabs fall
+ *  back to the default "menunggu review" lines). Map, not Record —
+ *  prototype-safe keyed lookup (the SAST object-injection idiom). */
+const TAB_EMPTY_COPY = new Map<QueueStatusFilter, { title: string; hint: string }>([
+  ['rejected', {
+    title: 'Tidak ada submission yang ditolak',
+    hint: 'Pesan yang ditolak muncul di sini — tombol “Kembalikan Poin” tersedia untuk pesan berbayar.',
+  }],
+  ['posting', {
+    title: 'Tidak ada submission yang sedang diposting',
+    hint: 'Submission yang sedang dikirim ke X muncul di sini selama proses posting berlangsung.',
+  }],
+  ['posted', {
+    title: 'Belum ada submission yang diposting',
+    hint: 'Riwayat pesan yang berhasil diposting ke X muncul di sini, lengkap dengan tautan tweet-nya.',
+  }],
+])
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -207,12 +235,13 @@ export function QueuePanel({ instances, onUnauthorized, reloadSignal }: QueuePan
 
   // Tab counts: the ACTIVE tab carries the server-side total for its
   // filter (sum of section.total); on the "all" tab the per-status
-  // counts come from the loaded rows. The "Ditolak" tab gets no count
-  // outside itself — rejected rows are not part of the reviewable "all"
-  // fetch, so a count there would always mislead as 0.
+  // counts come from the loaded rows. Tabs outside the reviewable
+  // "all" fetch (rejected / posting / posted) get no count outside
+  // themselves — their rows are never in that fetch, so a count there
+  // would always mislead as 0.
   const tabCount = useCallback((tab: QueueStatusFilter): number | null => {
     if (tab === statusTab) return queue.totals.all
-    if (statusTab === 'all' && tab !== 'rejected') {
+    if (statusTab === 'all' && !NOT_IN_ALL_TABS.has(tab)) {
       return queue.totals[STATUS_TABS.find((t) => t.value === tab)?.countKey ?? 'all']
     }
     return null
@@ -220,6 +249,7 @@ export function QueuePanel({ instances, onUnauthorized, reloadSignal }: QueuePan
 
   const searching = search.length > 0
   const filtering = selectedInstances.length > 0
+  const emptyCopy = TAB_EMPTY_COPY.get(statusTab)
 
   return (
     <section aria-labelledby="queue-title" className="flex flex-col gap-3">
@@ -384,18 +414,14 @@ export function QueuePanel({ instances, onUnauthorized, reloadSignal }: QueuePan
           <p className="m-0 text-sm font-semibold text-ink">
             {searching || filtering
               ? 'Tidak ada hasil'
-              : statusTab === 'rejected'
-                ? 'Tidak ada submission yang ditolak'
-                : 'Tidak ada submission menunggu review'}
+              : emptyCopy?.title ?? 'Tidak ada submission menunggu review'}
           </p>
           <p className="mt-1 text-xs text-ink-3">
             {searching
               ? `Tidak ada pesan yang cocok dengan “${search}”.`
               : filtering
                 ? 'Instance terpilih tidak punya submission pada filter ini.'
-                : statusTab === 'rejected'
-                  ? 'Pesan yang ditolak muncul di sini — tombol “Kembalikan Poin” tersedia untuk pesan berbayar.'
-                  : 'Submission baru dari semua instance akan muncul di sini.'}
+                : emptyCopy?.hint ?? 'Submission baru dari semua instance akan muncul di sini.'}
           </p>
         </div>
       ) : (

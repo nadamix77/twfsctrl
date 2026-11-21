@@ -50,6 +50,12 @@ export interface QueueTotals {
   /** Rejected rows — only fetched when the "Ditolak" tab is active
    *  (FR-D8 refund surface); counts stay 0 elsewhere. */
   rejected: number
+  /** In-flight rows — only fetched when the "Posting" tab is active;
+   *  counts stay 0 elsewhere (never part of the reviewable "all"). */
+  posting: number
+  /** Posted rows — only fetched when the "Diposting" tab is active
+   *  (history); counts stay 0 elsewhere. */
+  posted: number
 }
 
 export interface UseControllerQueue {
@@ -376,6 +382,8 @@ export function useControllerQueue(params: UseControllerQueueParams): UseControl
     let censored = 0
     let postFailed = 0
     let rejected = 0
+    let posting = 0
+    let posted = 0
     for (const section of sections) {
       all += section.total
       for (const item of section.items) {
@@ -383,9 +391,11 @@ export function useControllerQueue(params: UseControllerQueueParams): UseControl
         else if (item.status === 'censored') censored += 1
         else if (item.status === 'post_failed') postFailed += 1
         else if (item.status === 'rejected') rejected += 1
+        else if (item.status === 'posting') posting += 1
+        else if (item.status === 'posted') posted += 1
       }
     }
-    return { all, pending, censored, post_failed: postFailed, rejected }
+    return { all, pending, censored, post_failed: postFailed, rejected, posting, posted }
   }, [sections])
 
   const hasMore = useMemo(

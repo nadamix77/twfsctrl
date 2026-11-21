@@ -176,7 +176,7 @@ Body: `{"action": "requeue" | "breaker-reset" | "clear-cache"}` — aksi cepat (
 
 ## GET /api/controller/queue
 
-Query: `status` (`all|pending|censored|post_failed|rejected` — `all` hanya status reviewable; `rejected` adalah tab FR-D8 untuk refund manual), `page` (≥1), `limit` (1–50, default 50), `search` (string kosong/pendek diterima), `instances` (id koma-terpisah; kosong = semua instance enabled).
+Query: `status` (`all|pending|censored|posting|post_failed|rejected|posted` — `all` hanya status reviewable; `rejected` adalah tab FR-D8 untuk refund manual; `posting` = sedang dikirim ke X (live, baris read-only); `posted` = riwayat sukses beserta tautan tweet-nya (read-only — instance menolak delete 409)), `page` (≥1), `limit` (1–50, default 50), `search` (string kosong/pendek diterima), `instances` (id koma-terpisah; kosong = semua instance enabled).
 
 ```json
 {

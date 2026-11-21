@@ -13,6 +13,7 @@ import {
   Power,
   RotateCcw,
   Route,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -61,6 +62,8 @@ interface InstanceCardProps {
   /** Refresh overview + registry after any mutation. */
   onChanged: () => void
   onEdit: (instance: InstanceDto, focusPassword: boolean) => void
+  /** Open the per-instance Pengaturan dialog (credentials / filter / AI). */
+  onSettings: (instance: InstanceDto) => void
   onDelete: (instance: InstanceDto) => void
 }
 
@@ -174,7 +177,7 @@ function CountTile({ label, value }: { label: string; value: number | null }) {
   )
 }
 
-export function InstanceCard({ overview, onChanged, onEdit, onDelete }: InstanceCardProps) {
+export function InstanceCard({ overview, onChanged, onEdit, onSettings, onDelete }: InstanceCardProps) {
   const { instance, stats } = overview
   const { toast } = useToast()
   const [pendingQuick, setPendingQuick] = useState<InstanceQuickAction | null>(null)
@@ -404,6 +407,10 @@ export function InstanceCard({ overview, onChanged, onEdit, onDelete }: Instance
                 <DropdownMenuItem onSelect={() => { onEdit(instance, false) }}>
                   <Pencil />
                   Edit Instance
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { onSettings(instance) }}>
+                  <Settings2 />
+                  Pengaturan Instance
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => { void toggleEnabled() }} disabled={busy}>
                   <Power />
