@@ -57,6 +57,26 @@ export function parseStatsSnapshot(body: unknown): InstanceStatsSnapshot | null 
     }
   }
 
+  // Post-method mix (the warm-stats card): kept when total > 0 — a
+  // zero-total instance renders no bar (the original card's own rule).
+  const pmRaw = s.postMethodStats
+  let postMethodStats: InstanceStatsSnapshot['postMethodStats'] = null
+  if (pmRaw && typeof pmRaw === 'object') {
+    const pm = pmRaw as Record<string, unknown>
+    const total = num(pm.total)
+    if (total != null && total > 0) {
+      postMethodStats = {
+        total,
+        direct: num(pm.direct) ?? 0,
+        retry: num(pm.retry) ?? 0,
+        fallback: num(pm.fallback) ?? 0,
+        directRate: num(pm.directRate) ?? 0,
+        retryRate: num(pm.retryRate) ?? 0,
+        fallbackRate: num(pm.fallbackRate) ?? 0,
+      }
+    }
+  }
+
   return {
     pending: num(s.pending),
     censored: num(s.censored),
@@ -76,6 +96,7 @@ export function parseStatsSnapshot(body: unknown): InstanceStatsSnapshot | null 
     encryptionEnabled: typeof s.encryptionEnabled === 'boolean' ? s.encryptionEnabled : null,
     pendingPaymentsNow: num(s.pendingPaymentsNow),
     paymentsNeedingReview: num(s.paymentsNeedingReview),
+    postMethodStats,
   }
 }
 

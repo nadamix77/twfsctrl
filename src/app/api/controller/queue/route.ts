@@ -9,8 +9,10 @@ import type { QueueStatusFilter } from '@/lib/controller/types'
 //
 // Query params:
 //   status    one of all|pending|censored|posting|post_failed|rejected|
-//             posted (default all; rejected is the FR-D8 refund tab, posting
-//             and posted are live/history tabs — 'all' stays reviewable-only)
+//             posted (default all — passed straight through to the
+//             instance contract, where 'all' is its own default list
+//             filter spanning every status; rejected is the FR-D8
+//             refund tab, posting and posted are live/history tabs)
 //   page      integer 1–100 (default 1)
 //   limit     integer ≥1, clamped to QUEUE_PAGE_LIMIT (default 50)
 //   search    free text, trimmed, ≤100 chars (delegated per instance)

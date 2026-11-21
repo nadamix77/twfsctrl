@@ -10,9 +10,11 @@
 //   GET    /api/admin/session                    (stats.pending probe)
 //   GET    /api/submissions?status&page&limit&search
 //   PATCH  /api/submissions/:id                  (approve / reject)
+//   PUT    /api/submissions/:id                  (edit message text)
 //   DELETE /api/submissions/:id
 //   POST   /api/submissions/:id/post             (retry)
 //   POST   /api/submissions/:id/refund
+//   POST   /api/submissions/:id/censor           (region image censor)
 //   POST   /api/admin/submissions/requeue        (quick action)
 //   POST   /api/admin/circuit-breaker/reset      (quick action)
 //   POST   /api/admin/clear-cache                (quick action)
@@ -318,6 +320,40 @@ const submissions: Submission[] = [
     createdAt: minutesAgo(600),
     updatedAt: minutesAgo(598),
     submitter: submitter('usr_dita', 'ditaaa', 'Dita Anjani', '881006'),
+  },
+  {
+    id: 'sub_posted_2',
+    message: 'hari ini aku nerima keputusan sulit dan walau berat rasanya lega. doakan ya',
+    status: 'posted',
+    tweetId: '1798000444455556666',
+    postMethod: 'retry',
+    postError: null,
+    filterReasons: null,
+    imageUrl: null,
+    imageSha256: null,
+    nsfwStatus: 'approved',
+    paidPost: true,
+    refundedAt: null,
+    createdAt: minutesAgo(430),
+    updatedAt: minutesAgo(428),
+    submitter: submitter('usr_budi', 'budi_setiawan', 'Budi Setiawan', '881001'),
+  },
+  {
+    id: 'sub_posted_3',
+    message: 'numpang pinjem katalho: buat yang nunggu hasil hari ini, semoga kabar baiknya nyampe sore ini',
+    status: 'posted',
+    tweetId: '1798000777788889999',
+    postMethod: 'fallback',
+    postError: null,
+    filterReasons: null,
+    imageUrl: null,
+    imageSha256: null,
+    nsfwStatus: 'approved',
+    paidPost: false,
+    refundedAt: null,
+    createdAt: minutesAgo(300),
+    updatedAt: minutesAgo(298),
+    submitter: submitter('usr_rina', 'rina_mel', 'Rina Meliana', '881004'),
   },
   {
     id: 'sub_rejected_1',
@@ -784,6 +820,8 @@ const counters = {
   deletes: 0,
   retries: 0,
   refunds: 0,
+  edits: 0,
+  censors: 0,
   requeues: 0,
   breakerResets: 0,
   clearCaches: 0,
@@ -826,6 +864,14 @@ function nextTweetId(): string {
 
 function computeStats() {
   const count = (s: string) => submissions.filter((x) => x.status === s).length
+  // Post-method mix (the warm-stats postMethodStats): direct / retry /
+  // fallback over posted rows — rates as whole percentages.
+  const posted = submissions.filter((x) => x.status === 'posted')
+  const pmTotal = posted.length
+  const pmDirect = posted.filter((x) => x.postMethod === 'direct').length
+  const pmRetry = posted.filter((x) => x.postMethod === 'retry').length
+  const pmFallback = posted.filter((x) => x.postMethod === 'fallback').length
+  const rate = (n: number) => (pmTotal === 0 ? 0 : Math.round((n / pmTotal) * 100))
   return {
     pending: count('pending'),
     censored: count('censored'),
@@ -840,6 +886,15 @@ function computeStats() {
       pausedUntil: null,
       remainingMinutes: 0,
       threshold: 3,
+    },
+    postMethodStats: {
+      total: pmTotal,
+      direct: pmDirect,
+      retry: pmRetry,
+      fallback: pmFallback,
+      directRate: rate(pmDirect),
+      retryRate: rate(pmRetry),
+      fallbackRate: rate(pmFallback),
     },
   }
 }
@@ -948,6 +1003,52 @@ function publicRow(s: Submission): Record<string, unknown> {
 }
 
 const VALID_LIST_STATUSES = ['pending', 'censored', 'posting', 'post_failed', 'rejected', 'posted']
+
+// ── Edit + censor validation (the instance app's own bounds) ──
+
+const MIN_MESSAGE_LENGTH = 5
+const MAX_CENSOR_REGIONS = 16
+const REGION_COORD_EPS = 1e-6
+const CENSOR_REGION_TYPES = ['pixelate', 'blur', 'black'] as const
+
+function randomSha256(): string {
+  let hex = ''
+  while (hex.length < 64) hex += Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, '0')
+  return hex.slice(0, 64)
+}
+
+/** Validate an untrusted censor-region payload: an array of 1..16 rects
+ *  in FRACTIONAL image coordinates (x/y/w/h in 0..1, x+w/y+h within
+ *  bounds + eps) with a whitelisted type and an optional angle. Returns
+ *  the typed array, or an Indonesian error string. Mirrors the instance
+ *  app's validateCensorRegions contract. */
+function validateRegions(input: unknown): Array<{ x: number; y: number; w: number; h: number; type: string; angle?: number }> | string {
+  if (!Array.isArray(input)) return 'Format area sensor tidak valid'
+  if (input.length === 0) return 'Minimal satu area sensor diperlukan'
+  if (input.length > MAX_CENSOR_REGIONS) return `Maksimal ${MAX_CENSOR_REGIONS} area sensor`
+  const out: Array<{ x: number; y: number; w: number; h: number; type: string; angle?: number }> = []
+  for (const raw of input) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return 'Format area sensor tidak valid'
+    const r = raw as Record<string, unknown>
+    const { x, y, w, h, type, angle } = r
+    const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+    if (!(finite(x) && finite(y) && finite(w) && finite(h))) return 'Format area sensor tidak valid'
+    if (x < 0 || x > 1 || y < 0 || y > 1 || w <= 0 || h <= 0
+      || x + w > 1 + REGION_COORD_EPS || y + h > 1 + REGION_COORD_EPS) {
+      return 'Area sensor keluar dari batas gambar'
+    }
+    if (typeof type !== 'string' || !(CENSOR_REGION_TYPES as readonly string[]).includes(type)) {
+      return 'Jenis sensor tidak valid'
+    }
+    const region: { x: number; y: number; w: number; h: number; type: string; angle?: number } = { x, y, w, h, type }
+    if (angle !== undefined) {
+      if (!finite(angle) || angle < -180 || angle > 180) return 'Sudut rotasi tidak valid'
+      if (angle !== 0) region.angle = angle
+    }
+    out.push(region)
+  }
+  return out
+}
 
 // ── Router ───────────────────────────────────────────────────
 
@@ -1101,6 +1202,37 @@ Bun.serve({
         return errJson('Status tidak valid', 400)
       }
 
+      if (method === 'PUT') {
+        // Edit message text — the instance app's message-only content edit
+        // (the [id] collection's PUT). Same status gate as censor: only
+        // reviewable rows are editable; posted/rejected/refunded refuse.
+        if (!originOk(req)) {
+          counters.originBlocked++
+          return errJson('Header Origin/Referer tidak ditemukan', 403)
+        }
+        if (!authed) return errJson('Silakan login sebagai admin', 401)
+        if (!sub) return errJson('Submission tidak ditemukan', 404)
+        const body = await readJson(req)
+        const message = body?.message
+        if (typeof message !== 'string') return errJson('Pesan wajib diisi', 400)
+        const trimmed = message.trim()
+        if (trimmed.length < MIN_MESSAGE_LENGTH) {
+          return errJson(`Pesan terlalu pendek — minimal ${MIN_MESSAGE_LENGTH} karakter`, 400)
+        }
+        if (trimmed.length > 5000) return errJson('Pesan terlalu panjang', 400)
+        if (!['pending', 'censored', 'post_failed'].includes(sub.status)) {
+          return errJson('Status tidak valid untuk edit', 400)
+        }
+        counters.edits++
+        if (sub.message === trimmed) {
+          // No-op guard — the instance app performs no write on a zero-effect save.
+          return json({ success: true, changed: false, submission: { id: sub.id, message: trimmed } })
+        }
+        sub.message = trimmed
+        sub.updatedAt = new Date().toISOString()
+        return json({ success: true, changed: true, submission: { id: sub.id, message: trimmed } })
+      }
+
       if (method === 'DELETE') {
         if (!originOk(req)) {
           counters.originBlocked++
@@ -1162,6 +1294,33 @@ Bun.serve({
       sub.updatedAt = sub.refundedAt
       counters.refunds++
       return json({ submission: publicRow(sub), refund: 'refunded' })
+    }
+
+    match = path.match(/^\/api\/submissions\/([^/]+)\/censor$/)
+    if (match && method === 'POST') {
+      // Region image censor — the instance app renders the regions
+      // server-side and swaps in a NEW content-addressed image (the
+      // original bytes stay in B2, orphaned). Simulated here by bumping
+      // imageSha256 so the controller's ?v= cache-bust picks the new
+      // version — the observable contract (updated row + new sha).
+      if (!originOk(req)) {
+        counters.originBlocked++
+        return errJson('Header Origin/Referer tidak ditemukan', 403)
+      }
+      if (!authed) return errJson('Silakan login sebagai admin', 401)
+      const sub = submissions.find((s) => s.id === decodeURIComponent(match[1]))
+      if (!sub) return errJson('Submission tidak ditemukan', 404)
+      if (!['pending', 'censored', 'post_failed'].includes(sub.status)) {
+        return errJson('Status tidak valid untuk sensor gambar', 400)
+      }
+      if (!sub.imageUrl) return errJson('Kiriman tidak memiliki gambar', 400)
+      const body = await readJson(req)
+      const regions = validateRegions(body?.regions)
+      if (typeof regions === 'string') return errJson(regions, 400)
+      counters.censors++
+      sub.imageSha256 = randomSha256()
+      sub.updatedAt = new Date().toISOString()
+      return json({ success: true, submission: publicRow(sub), regions: regions.length })
     }
 
     // ---- Quick actions ----

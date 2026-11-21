@@ -28,29 +28,26 @@ interface QueuePanelProps {
 }
 
 const STATUS_TABS: ReadonlyArray<{ value: QueueStatusFilter; label: string; countKey: keyof QueueTotals }> = [
+  // 'Semua' passes straight through to the instance contract's 'all'
+  // list filter — every status shows here: pending, censored, posting,
+  // post_failed, rejected (FR-D8 refund rows), posted (history).
   { value: 'all', label: 'Semua', countKey: 'all' },
   { value: 'pending', label: 'Menunggu', countKey: 'pending' },
   { value: 'censored', label: 'Disensor', countKey: 'censored' },
   { value: 'post_failed', label: 'Gagal Posting', countKey: 'post_failed' },
-  // FR-D8: rejected rows surface the manual "Kembalikan Poin" refund
-  // action; 'all' intentionally stays reviewable-only (PRD §5.1).
   { value: 'rejected', label: 'Ditolak', countKey: 'rejected' },
-  // Live/history tabs: `posting` shows submissions currently in flight
-  // to X, `posted` the successfully posted history with tweet links.
-  // Rows there are read-only (the instance refuses mutations from
-  // those statuses) — visibility only.
   { value: 'posting', label: 'Posting', countKey: 'posting' },
   { value: 'posted', label: 'Diposting', countKey: 'posted' },
 ]
 
-/** Tabs whose rows are never part of the reviewable "all" fetch —
- *  their counts would always mislead as 0 outside their own tab. */
-const NOT_IN_ALL_TABS = new Set<QueueStatusFilter>(['rejected', 'posting', 'posted'])
-
-/** Empty-state copy for the non-reviewable tabs (reviewable tabs fall
- *  back to the default "menunggu review" lines). Map, not Record —
- *  prototype-safe keyed lookup (the SAST object-injection idiom). */
+/** Empty-state copy per tab (tabs without an entry fall back to the
+ *  default "menunggu review" lines). Map, not Record — prototype-safe
+ *  keyed lookup (the SAST object-injection idiom). */
 const TAB_EMPTY_COPY = new Map<QueueStatusFilter, { title: string; hint: string }>([
+  ['all', {
+    title: 'Belum ada submission',
+    hint: 'Semua kiriman dari semua instance — menunggu review, disensor, ditolak, hingga yang sudah diposting — muncul di sini.',
+  }],
   ['rejected', {
     title: 'Tidak ada submission yang ditolak',
     hint: 'Pesan yang ditolak muncul di sini — tombol “Kembalikan Poin” tersedia untuk pesan berbayar.',
@@ -234,14 +231,14 @@ export function QueuePanel({ instances, onUnauthorized, reloadSignal }: QueuePan
   )
 
   // Tab counts: the ACTIVE tab carries the server-side total for its
-  // filter (sum of section.total); on the "all" tab the per-status
-  // counts come from the loaded rows. Tabs outside the reviewable
-  // "all" fetch (rejected / posting / posted) get no count outside
-  // themselves — their rows are never in that fetch, so a count there
-  // would always mislead as 0.
+  // filter (sum of section.total); on the "all" tab every per-status
+  // count comes from the loaded rows (first-page approximation — the
+  // server total exists only for the active filter). Rows on the
+  // posting/posted tabs are read-only (the instance refuses mutations
+  // from those statuses) — visibility only.
   const tabCount = useCallback((tab: QueueStatusFilter): number | null => {
     if (tab === statusTab) return queue.totals.all
-    if (statusTab === 'all' && !NOT_IN_ALL_TABS.has(tab)) {
+    if (statusTab === 'all') {
       return queue.totals[STATUS_TABS.find((t) => t.value === tab)?.countKey ?? 'all']
     }
     return null
@@ -439,7 +436,7 @@ export function QueuePanel({ instances, onUnauthorized, reloadSignal }: QueuePan
                   tabIndex={focusedKey === key || (focusedKey == null && key === firstKey) ? 0 : -1}
                   degraded={sectionByInstance.get(item.instanceId)?.health !== 'ok'}
                   instanceSelected={selectedInstances.includes(item.instanceId)}
-                  onAction={(action) => queue.runAction(item.instanceId, item.id, action)}
+                  onAction={(action, body) => queue.runAction(item.instanceId, item.id, action, body)}
                   onRemove={() => { queue.removeItem(item.instanceId, item.id) }}
                   onUpdate={(patch) => { queue.updateItem(item.instanceId, item.id, patch) }}
                   onInstanceClick={toggleInstance}

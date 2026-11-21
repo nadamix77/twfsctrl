@@ -94,6 +94,17 @@ export interface InstanceStatsSnapshot {
   encryptionEnabled: boolean | null
   pendingPaymentsNow: number | null
   paymentsNeedingReview: number | null
+  /** Post-method mix over the instance's recent posts (the warm-stats
+   *  `postMethodStats`): direct vs retry vs fallback counts + rates. */
+  postMethodStats: {
+    total: number
+    direct: number
+    retry: number
+    fallback: number
+    directRate: number
+    retryRate: number
+    fallbackRate: number
+  } | null
 }
 
 /** One instance card in the overview grid. */
@@ -190,7 +201,28 @@ export interface QueueResponse {
 
 // ── Queue actions (FR-D4–D8) ────────────────────────────────
 
-export type QueueAction = 'approve' | 'reject' | 'retry' | 'refund' | 'delete'
+export type QueueAction = 'approve' | 'reject' | 'retry' | 'refund' | 'delete' | 'edit' | 'censor'
+
+/** One censor region in FRACTIONAL image coordinates (x/y/w/h in 0..1,
+ *  x+w/y+h within bounds) — the instance app's CensorRegion contract.
+ *  `type`: pixelate (mosaic) | blur (gaussian) | black (solid bar).
+ *  `angle` rotates the rect around its own center (degrees, -180..180). */
+export interface CensorRegionInput {
+  x: number
+  y: number
+  w: number
+  h: number
+  type: 'pixelate' | 'blur' | 'black'
+  angle?: number
+}
+
+/** Request body for the body-carrying queue actions. `edit` carries the
+ *  new message text (PUT semantics — message-only content edit); `censor`
+ *  carries the region list (POST …/censor). The bodyless verbs ignore it. */
+export interface QueueActionPayload {
+  message?: string
+  regions?: CensorRegionInput[]
+}
 
 /** POST /api/controller/queue/[instanceId]/[submissionId]/[action] response.
  *  `body` is the VERBATIM instance JSON (kind/submission/tweetId/refund/…)

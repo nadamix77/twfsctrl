@@ -94,7 +94,8 @@ Fan-out `GET {baseUrl}/api/admin/session` ke semua instance enabled (paralel, ti
         "revenueTodayIdr": 15000, "revenueMonthIdr": 420000,
         "submitters": 210, "postMethodSetting": "auto",
         "encryptionEnabled": true,
-        "pendingPaymentsNow": 0, "paymentsNeedingReview": 0
+        "pendingPaymentsNow": 0, "paymentsNeedingReview": 0,
+        "postMethodStats": { "total": 125, "direct": 120, "retry": 0, "fallback": 5, "directRate": 96, "retryRate": 0, "fallbackRate": 4 }
       },
       "error": null, "retryAfterSec": null, "fetchedAt": "2026-11-21T01:00:00.000Z"
     }
@@ -176,7 +177,7 @@ Body: `{"action": "requeue" | "breaker-reset" | "clear-cache"}` — aksi cepat (
 
 ## GET /api/controller/queue
 
-Query: `status` (`all|pending|censored|posting|post_failed|rejected|posted` — `all` hanya status reviewable; `rejected` adalah tab FR-D8 untuk refund manual; `posting` = sedang dikirim ke X (live, baris read-only); `posted` = riwayat sukses beserta tautan tweet-nya (read-only — instance menolak delete 409)), `page` (≥1), `limit` (1–50, default 50), `search` (string kosong/pendek diterima), `instances` (id koma-terpisah; kosong = semua instance enabled).
+Query: `status` (`all|pending|censored|posting|post_failed|rejected|posted` — `all` diteruskan langsung ke kontrak instance dan mencakup SEMUA status; `rejected` adalah tab FR-D8 untuk refund manual; `posting` = sedang dikirim ke X (live, baris read-only); `posted` = riwayat sukses beserta tautan tweet-nya (read-only — instance menolak delete 409)), `page` (≥1), `limit` (1–50, default 50), `search` (string kosong/pendek diterima), `instances` (id koma-terpisah; kosong = semua instance enabled).
 
 ```json
 {
@@ -208,16 +209,20 @@ Query: `status` (`all|pending|censored|posting|post_failed|rejected|posted` — 
 
 ## POST /api/controller/queue/[instanceId]/[submissionId]/[action]
 
-`action`: `approve | reject | retry | refund | delete` (FR-D4–D8). Tanpa body.
+`action`: `approve | reject | retry | refund | delete` (FR-D4–D8) — tanpa body. Dua verb tambahan yang membawa body JSON:
+
+- `edit` — `{"message": "…"}` → `PUT /api/submissions/[id]` instance (edit teks pesan; gerbang status sama dengan censor)
+- `censor` — `{"regions": [{x,y,w,h,type,angle?}, …]}` → `POST /api/submissions/[id]/censor` instance (sensor gambar area; koordinat fraksional 0..1, 1–16 area, tipe `pixelate|blur|black`)
 
 ```json
 { "ok": true, "status": 200, "body": { "kind": "auto-posted", "tweetId": "176…", "submission": {…} }, "error": null }
 ```
 
-- `body` = JSON instance **verbatim** — `kind` (`auto-posted`/`queued`+`deferReason`/`error`), `refund`, `submission` terbaru, dll. dirender oleh UI apa adanya.
+- `body` = JSON instance **verbatim** — `kind` (`auto-posted`/`queued`+`deferReason`/`error`), `refund`, `submission` terbaru, `changed` (edit), dll. dirender oleh UI apa adanya.
+- Controller memvalidasi payload edit/censor secara defensif (batas panjang/jumlah/koordinat/tipe) sebelum fan-out — instance tetap sumber kebenaran semantiknya.
 - `409` = konflik CAS di instance (status berubah) — UI me-refresh baris, bukan diam-diam.
 - `503` = circuit breaker aktif di instance (approve ditunda).
-- Semua hasil ter-audit sebagai `submission.<action>`.
+- Semua hasil ter-audit sebagai `submission.<action>`; detail audit = `kind` instance, `changed`/`no-op` (edit), `regions:<n>` (censor) — tidak pernah isi pesan (FR-F2).
 
 ## GET /api/controller/media/[instanceId]/[submissionId]
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   QueueAction,
+  QueueActionPayload,
   QueueActionResponse,
   QueueItem,
   QueueResponse,
@@ -47,14 +48,14 @@ export interface QueueTotals {
   pending: number
   censored: number
   post_failed: number
-  /** Rejected rows — only fetched when the "Ditolak" tab is active
-   *  (FR-D8 refund surface); counts stay 0 elsewhere. */
+  /** Per-status counts computed from the LOADED rows — on the "Semua"
+  *  tab (which now spans every status) they are a first-page
+  *  approximation; the exact server total exists only for the active
+  *  filter (FR-D8 refund rows count under 'rejected'). */
   rejected: number
-  /** In-flight rows — only fetched when the "Posting" tab is active;
-   *  counts stay 0 elsewhere (never part of the reviewable "all"). */
+  /** In-flight rows — read-only, counted on "Semua" like the rest. */
   posting: number
-  /** Posted rows — only fetched when the "Diposting" tab is active
-   *  (history); counts stay 0 elsewhere. */
+  /** Posted rows (history with tweet links). */
   posted: number
 }
 
@@ -68,7 +69,9 @@ export interface UseControllerQueue {
   error: string | null
   /** instanceId → verbatim conflict message (recent 409, auto-expires). */
   conflictNotice: Record<string, string>
-  runAction: (instanceId: string, submissionId: string, action: QueueAction) => Promise<QueueActionResponse | null>
+  /** Body-carrying verbs (edit/censor) pass their payload here; the
+   *   bodyless verbs omit it. */
+  runAction: (instanceId: string, submissionId: string, action: QueueAction, body?: QueueActionPayload) => Promise<QueueActionResponse | null>
   removeItem: (instanceId: string, submissionId: string) => void
   updateItem: (instanceId: string, submissionId: string, patch: Partial<QueueItem>) => void
   refresh: () => Promise<void>
@@ -317,11 +320,19 @@ export function useControllerQueue(params: UseControllerQueueParams): UseControl
   }, [])
 
   const runAction = useCallback(
-    async (instanceId: string, submissionId: string, action: QueueAction): Promise<QueueActionResponse | null> => {
+    async (
+      instanceId: string,
+      submissionId: string,
+      action: QueueAction,
+      body?: QueueActionPayload,
+    ): Promise<QueueActionResponse | null> => {
       const path =
         `/api/controller/queue/${encodeURIComponent(instanceId)}` +
         `/${encodeURIComponent(submissionId)}/${action}`
-      const result = await controllerFetch<QueueActionResponse>(path, { method: 'POST' })
+      const result = await controllerFetch<QueueActionResponse>(path, {
+        method: 'POST',
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      })
       if (result.status === 401) {
         onUnauthorizedRef.current?.()
         return null

@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   Coins,
   ExternalLink,
+  EyeOff,
   ImageIcon,
   Loader2,
+  Pencil,
   RotateCcw,
   Trash2,
 } from 'lucide-react'
-import type { QueueAction, QueueActionResponse, QueueItem } from '@/lib/controller/types'
+import type { CensorRegionInput, QueueAction, QueueActionPayload, QueueActionResponse, QueueItem } from '@/lib/controller/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -30,6 +32,8 @@ import { MaskGlyph } from '@/components/shared/mask-glyph'
 import { PaidPostMark } from '@/components/shared/paid-post-mark'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { XLogo } from '@/components/shared/x-logo'
+import { CensorImageDialog } from './censor-image-dialog'
+import { EditMessageDialog } from './edit-message-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatRelativeTime } from '@/lib/core/format'
 import { cn } from '@/lib/core/utils'
@@ -56,7 +60,8 @@ interface QueueRowProps {
   index: number
   tabIndex: number
   instanceSelected: boolean
-  onAction: (action: QueueAction) => Promise<QueueActionResponse | null>
+  /** Runs a queue action; body-carrying verbs (edit/censor) pass their payload. */
+  onAction: (action: QueueAction, body?: QueueActionPayload) => Promise<QueueActionResponse | null>
   onRemove: () => void
   onUpdate: (patch: Partial<QueueItem>) => void
   onInstanceClick: (instanceId: string) => void
@@ -152,6 +157,8 @@ export function QueueRow({
   const [busyAction, setBusyAction] = useState<QueueAction | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [imgBroken, setImgBroken] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [censorOpen, setCensorOpen] = useState(false)
 
   const isPending = item.status === 'pending'
   const isCensored = item.status === 'censored'
@@ -229,15 +236,15 @@ export function QueueRow({
     else toast({ title: b.message ?? 'Aksi selesai' })
   }, [onRemove, onUpdate, toast])
 
-  const handleAction = useCallback(async (action: QueueAction) => {
-    if (busy || degraded) return
+  const handleAction = useCallback(async (action: QueueAction, body?: QueueActionPayload): Promise<QueueActionResponse | null> => {
+    if (busy || degraded) return null
     setBusyAction(action)
-    const envelope = await onAction(action)
+    const envelope = await onAction(action, body)
     setBusyAction(null)
-    if (envelope == null) return // transport/401 — the hook already cascaded
+    if (envelope == null) return null // transport/401 — the hook already cascaded
     if (!envelope.ok) {
       handleEnvelopeError(envelope)
-      return
+      return envelope
     }
     switch (action) {
       case 'approve':
@@ -270,7 +277,7 @@ export function QueueRow({
             description: 'Coba lagi nanti setelah saldo pembuat turun.',
             variant: 'destructive',
           })
-          return
+          return envelope
         }
         onRemove()
         toast({ title: refund === 'refunded' ? 'Poin dikembalikan' : `Refund: ${refund ?? 'selesai'}` })
@@ -282,8 +289,53 @@ export function QueueRow({
         toast({ title: 'Pesan dihapus', description: refund === 'refunded' ? 'Poin dikembalikan' : undefined })
         break
       }
+      case 'edit':
+      case 'censor': {
+        // Success handling lives in the dialog submit wrappers — the
+        // message/imageUrl patch + toast ride handleEditSubmit /
+        // handleCensorSubmit, which called handleAction and branch on
+        // this same envelope themselves.
+        break
+      }
     }
+    return envelope
   }, [busy, degraded, onAction, onRemove, handleEnvelopeError, handleApproveLike, toast])
+
+  // ── Edit Pesan (PUT — message-only content edit) ────────
+  const handleEditSubmit = useCallback(
+    async (message: string): Promise<QueueActionResponse | null> => {
+      const envelope = await handleAction('edit', { message })
+      if (envelope == null || !envelope.ok) return envelope
+      const changed = (envelope.body as { changed?: unknown } | null)?.changed
+      if (changed === true) {
+        onUpdate({ message })
+        toast({ title: 'Pesan diperbarui' })
+      } else {
+        toast({ title: 'Tidak ada perubahan' })
+      }
+      return envelope
+    },
+    [handleAction, onUpdate, toast],
+  )
+
+  // ── Sensor Gambar (POST …/censor — region image censor) ─
+  const handleCensorSubmit = useCallback(
+    async (regions: CensorRegionInput[]): Promise<QueueActionResponse | null> => {
+      const envelope = await handleAction('censor', { regions })
+      if (envelope == null || !envelope.ok) return envelope
+      // The instance swapped in a NEW content-addressed image — rebuild
+      // the proxy URL with the new sha so the thumb re-fetches (?v= bust).
+      const submission = (envelope.body as { submission?: { imageSha256?: unknown } | null } | null)?.submission
+      const sha = submission?.imageSha256
+      if (typeof sha === 'string' && sha.length >= 10) {
+        onUpdate({ imageUrl: `/api/controller/media/${item.instanceId}/${item.id}?v=${sha.slice(0, 10)}` })
+      }
+      setImgBroken(false) // the new version re-fetches cleanly
+      toast({ title: 'Gambar disensor' })
+      return envelope
+    },
+    [handleAction, onUpdate, toast, item.instanceId, item.id],
+  )
 
   const triggerPrimary = useCallback(() => {
     if (isPending || isCensored) void handleAction('approve')
@@ -500,6 +552,40 @@ export function QueueRow({
                 : <RotateCcw className="size-3.5" />}
             </Button>
           )}
+
+          {/* Edit Pesan — the instance's message-only content edit (PUT).
+              Reviewable rows only; the instance refuses posted/rejected. */}
+          {(isPending || isCensored || isFailed) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setEditOpen(true) }}
+              disabled={busy || degraded}
+              aria-label="Edit pesan"
+              className="size-11 p-0 text-ink-3 hover:text-ink md:size-9"
+            >
+              {busyAction === 'edit'
+                ? <Loader2 className="size-3.5 animate-spin" />
+                : <Pencil className="size-3.5" />}
+            </Button>
+          )}
+
+          {/* Sensor Gambar — the instance's region image censor. Shown on
+              reviewable rows WITH an image (the instance 400s imageless). */}
+          {(isPending || isCensored || isFailed) && item.hasImage && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setCensorOpen(true) }}
+              disabled={busy || degraded}
+              aria-label="Sensor gambar"
+              className="size-11 p-0 text-ink-3 hover:text-ink md:size-9"
+            >
+              {busyAction === 'censor'
+                ? <Loader2 className="size-3.5 animate-spin" />
+                : <EyeOff className="size-3.5" />}
+            </Button>
+          )}
           {isRejected && (
             <Button
               size="sm"
@@ -555,6 +641,23 @@ export function QueueRow({
           )}
         </div>
       </div>
+
+      {/* Body-carrying action dialogs (state owned here, submit rides
+          the same onAction pipeline as the bodyless verbs). */}
+      <EditMessageDialog
+        item={item}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSubmit={handleEditSubmit}
+      />
+      {item.hasImage && (
+        <CensorImageDialog
+          item={item}
+          open={censorOpen}
+          onOpenChange={setCensorOpen}
+          onSubmit={handleCensorSubmit}
+        />
+      )}
     </motion.li>
   )
 }

@@ -37,7 +37,7 @@ Catatan: mengubah password di form edit — kosongkan field untuk mempertahankan
 
 ## Moderasi dari antrean terpadu
 
-Baris dari semua instance enabled bergabung, terbaru dulu. Filter: tab status (Semua / Menunggu / Disensor / Gagal Posting / Ditolak), chip instance, dan kotak cari (pesan/username — diteruskan ke pencarian tiap instance). **Muat lagi** memuat halaman berikutnya per instance. Tab **Ditolak** tidak dihitung di "Semua" (Semua = status reviewable saja); gunakan tab itu untuk mengembalikan poin pesan berbayar yang sudah ditolak (FR-D8).
+Baris dari semua instance enabled bergabung, terbaru dulu. Filter: tab status (Semua / Menunggu / Disensor / Gagal Posting / Ditolak / Posting / Diposting), chip instance, dan kotak cari (pesan/username — diteruskan ke pencarian tiap instance). **Muat lagi** memuat halaman berikutnya per instance. Tab **Semua** memuat SEMUA status — termasuk yang ditolak, sedang diposting, dan riwayat yang sudah diposting ke X (meniru antrean Tweetfess). Baris `posting`/`posted` bersifat read-only; gunakan tab **Ditolak** untuk mengembalikan poin pesan berbayar yang sudah ditolak (FR-D8).
 
 Aksi per baris (satu per satu — tidak ada bulk moderasi di v1):
 

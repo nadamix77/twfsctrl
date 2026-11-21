@@ -1,13 +1,15 @@
 // ============================================================
 // queue.ts — Unified moderation queue fan-out (Epic D)
 //
-// Merged view of submissions from every ENABLED instance. The 'all'
-// tab performs three parallel per-instance calls over the reviewable
-// statuses (pending / censored / post_failed) so pagination stays
-// per-status-correct; specific tabs — including the live 'posting'
-// (in-flight to X) and history 'posted' tabs — perform one. Sections are
-// per-instance so a degraded instance freezes its OWN slice only
-// (FR-D11) while the client flattens + sorts by createdAt desc.
+// Merged view of submissions from every ENABLED instance. The status
+// filter — including 'all' — passes STRAIGHT THROUGH to each instance's
+// GET /api/submissions: the instance contract accepts 'all' as its own
+// default list filter and answers one correctly-paginated, createdAt-
+// desc list spanning every status (pending, censored, posting,
+// post_failed, rejected, posted) — so "Semua" really shows SEMUA.
+// Sections are per-instance so a degraded instance freezes its OWN
+// slice only (FR-D11) while the client flattens + sorts by createdAt
+// desc.
 //
 // Images: instance media is auth-gated (/api/media/:id), so rows
 // carry a CONTROLLER-relative proxy URL — the browser never talks
@@ -19,7 +21,6 @@ import { loadResolvedInstances, type ResolvedInstance } from './registry'
 import { controllerDebug } from './log'
 import type { InstanceHealth, QueueItem, QueueResponse, QueueSection, QueueStatusFilter } from './types'
 
-export const REVIEWABLE_STATUSES = ['pending', 'censored', 'post_failed'] as const
 export const QUEUE_PAGE_LIMIT = 50
 
 export interface QueueFanOutParams {
@@ -164,7 +165,6 @@ export async function fanOutQueue(params: QueueFanOutParams): Promise<QueueRespo
     ? all.filter((instance) => params.instanceIds?.includes(instance.id))
     : all
 
-  const statuses = params.status === 'all' ? [...REVIEWABLE_STATUSES] : [params.status]
   const limit = Math.min(Math.max(params.limit, 1), QUEUE_PAGE_LIMIT)
   const fetchedAt = new Date().toISOString()
 
@@ -192,37 +192,24 @@ export async function fanOutQueue(params: QueueFanOutParams): Promise<QueueRespo
         }
       }
 
-      const results = await Promise.all(
-        statuses.map((status) => fetchStatusPage(instance, status, params.page, limit, params.search)),
-      )
-
-      // A failed status fetch degrades the whole section (frozen slice, FR-D11)
-      const failure = results.find((result) => result.failure !== null)
-      if (failure && failure.failure) {
+      // One call per instance, filter passed through verbatim — 'all'
+      // included (the instance contract's default list status). A failed
+      // call degrades the whole section (frozen slice, FR-D11).
+      const result = await fetchStatusPage(instance, params.status, params.page, limit, params.search)
+      if (result.failure !== null) {
         return {
           ...base,
-          health: failure.failure,
-          error: failure.error,
-          retryAfterSec: failure.retryAfterSec,
+          health: result.failure,
+          error: result.error,
+          retryAfterSec: result.retryAfterSec,
         }
       }
-
-      const seen = new Set<string>()
-      const items: QueueItem[] = []
-      for (const result of results) {
-        for (const item of result.items) {
-          if (seen.has(item.id)) continue
-          seen.add(item.id)
-          items.push(item)
-        }
-      }
-      items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
 
       return {
         ...base,
-        items,
-        total: results.reduce((sum, result) => sum + result.total, 0),
-        hasMore: results.some((result) => result.hasMore),
+        items: result.items,
+        total: result.total,
+        hasMore: result.hasMore,
       }
     }),
   )

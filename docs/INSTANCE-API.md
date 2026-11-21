@@ -46,9 +46,11 @@ This document lists every HTTP endpoint exposed by a tweetfess instance. All end
   - [POST /api/admin/submitters/points-adjust](#post-apiadminsubmitterspoints-adjust)
   - [GET /api/submissions](#get-apisubmissions)
   - [PATCH /api/submissions/[id]](#patch-apisubmissionsid)
+  - [PUT /api/submissions/[id]](#put-apisubmissionsid)
   - [DELETE /api/submissions/[id]](#delete-apisubmissionsid)
   - [POST /api/submissions/[id]/post](#post-apisubmissionsidpost)
   - [POST /api/submissions/[id]/refund](#post-apisubmissionsidrefund)
+  - [POST /api/submissions/[id]/censor](#post-apisubmissionsidcensor)
   - [POST /api/admin/submissions/requeue](#post-apiadminsubmissionsrequeue)
   - [GET /api/admin/payments](#get-apiadminpayments)
   - [POST /api/admin/payments/[id]/confirm](#post-apiadminpaymentsidconfirm)
@@ -1120,6 +1122,30 @@ Approve or reject a submission (admin only).
 
 ---
 
+### PUT /api/submissions/[id]
+
+Edit the submission's message text (admin only) — the message-only content edit. No status change, no filter pipeline: the sanitized text replaces the stored message (hashtags append at post time, so a saved-while-editing hashtag change converges on the next read).
+
+**Request body:**
+
+```json
+{ "message": "edited confession text" }
+```
+
+**Status gate:** identical to the censor verb — editable from `pending` / `censored` / `post_failed`; `posted` → 400 (terminal), fresh `posting` → 409, `rejected`/refunded → 400.
+
+**Response (200):**
+
+```json
+{ "success": true, "changed": true, "submission": { "id": "clk...", "message": "edited confession text" } }
+```
+
+`changed: false` is the no-op guard — a zero-effect save (identical message) performs no write.
+
+**Error codes:** 400 (non-string/empty message, below the shared min-length floor, invalid status), 404 (not found), 409 (posting CAS conflict).
+
+---
+
 ### DELETE /api/submissions/[id]
 
 Delete a submission (admin only). Deletes the B2 image too (best-effort).
@@ -1182,6 +1208,35 @@ Manually settle a rejected row's spend (admin only, no request body) — the das
 | 400 | Not `rejected` (live rows settle via their own synchronous sites), or a 187-marked duplicate reject |
 | 404 | Unknown id — also the answer when a racing delete removes the row |
 | 409 | The CAS raced a concurrent delete: `{ "kind": "error", "submission": ... }` with `error: "Status pesan berubah sebelum diproses. Cek riwayat submission-mu."` — the honest current row rides the response |
+
+---
+
+### POST /api/submissions/[id]/censor
+
+Region image censor (admin only). The instance downloads the CURRENT image bytes, renders the censor regions server-side, and uploads the result as a NEW immutable content-addressed object — the four image-pointer fields on the row CAS-swap to it (approve/retry/autopost all consume the new bytes with zero posting-side changes). The original bytes stay in storage, orphaned, until bucket lifecycle expires them.
+
+**Status gate:** identical to the edit verb — censorable from `pending` / `censored` / `post_failed`; `posted` → 400, fresh `posting` → 409, `rejected`/refunded → 400. Requires the row to HAVE an image (400 otherwise).
+
+**Request body** — `regions`: 1–16 rects in FRACTIONAL image coordinates (`x`/`y`/`w`/`h` in 0..1, `x+w`/`y+h` within bounds), each with a whitelisted `type`. Optional `angle` rotates the rect around its own center (degrees, −180..180; absent = axis-aligned, explicit 0 collapses to absent). Optional `intensity` is per-type (pixelate: mosaic block size; blur: gaussian sigma; black: ignored/absent):
+
+```json
+{
+  "regions": [
+    { "x": 0.1, "y": 0.1, "w": 0.3, "h": 0.2, "type": "pixelate" },
+    { "x": 0.5, "y": 0.5, "w": 0.3, "h": 0.25, "type": "black", "angle": 15 }
+  ]
+}
+```
+
+**Response (200):**
+
+```json
+{ "success": true, "submission": { "id": "clk...", "imageSha256": "<new sha>", "...": "the updated row" }, "regions": 2 }
+```
+
+The new `imageSha256` is the cache-bust key: clients that proxy media with `?v=<sha prefix>` re-fetch the censored version automatically.
+
+**Error codes:** 400 (no image on the row; invalid region format/bounds/type/angle/intensity; invalid status), 404 (not found), 409 (posting CAS conflict), 500 (image storage not configured / image load failed), 503 (storage cap window).
 
 ---
 

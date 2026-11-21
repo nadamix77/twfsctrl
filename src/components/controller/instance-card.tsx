@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  Activity,
   AlertTriangle,
   Cookie,
   Eraser,
@@ -302,6 +303,47 @@ export function InstanceCard({ overview, onChanged, onEdit, onSettings, onDelete
               <CountTile label="Ditolak" value={stats.rejected} />
               <CountTile label="Terkirim" value={stats.posted} />
               <CountTile label="Total" value={stats.total} />
+            </div>
+          )}
+
+          {/* Post-method mix (the instance app's warm-stats card) —
+              rendered only when the instance reports posts (total > 0). */}
+          {stats?.postMethodStats != null && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 text-xs">
+                <Activity className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                <span className="font-medium text-ink">Rate metode posting</span>
+                <span className="text-ink-3">{stats.postMethodStats.total} post terakhir</span>
+              </div>
+              <div
+                className="flex h-2.5 w-full overflow-hidden rounded-full bg-cerah-surface-2"
+                role="img"
+                aria-label={`Metode posting: langsung ${stats.postMethodStats.directRate}%, coba ulang ${stats.postMethodStats.retryRate}%, fallback ${stats.postMethodStats.fallbackRate}%`}
+              >
+                {stats.postMethodStats.direct > 0 && (
+                  <span className="bg-cerah-green" style={{ width: `${stats.postMethodStats.directRate}%` }} />
+                )}
+                {stats.postMethodStats.retry > 0 && (
+                  <span className="bg-cerah-amber-strong" style={{ width: `${stats.postMethodStats.retryRate}%` }} />
+                )}
+                {stats.postMethodStats.fallback > 0 && (
+                  <span className="bg-cerah-red" style={{ width: `${stats.postMethodStats.fallbackRate}%` }} />
+                )}
+              </div>
+              <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-ink-3">
+                <span className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-cerah-green" aria-hidden />
+                  Langsung {stats.postMethodStats.directRate}%
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-cerah-amber-strong" aria-hidden />
+                  Coba ulang {stats.postMethodStats.retryRate}%
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-cerah-red" aria-hidden />
+                  Fallback {stats.postMethodStats.fallbackRate}%
+                </span>
+              </p>
             </div>
           )}
 

@@ -119,7 +119,7 @@ Success for P1: open one URL, see everything, clear the queue in minutes, never 
 | **Admin token** | Instance-side HMAC token from `POST /api/admin/login`; valid 7 days; accepted as cookie or `Authorization: Bearer` header (ADR-002). |
 | **Hot stats** | Fast-changing instance data from `GET /api/admin/stats` (status counts, circuit breaker). |
 | **Warm stats** | Slower-changing data from `GET /api/admin/stats/warm` (cookie status, credits, filter settings summary, revenue today, submitter count). |
-| **Unified queue** | The merged, cross-instance list of submissions in reviewable states (`pending`, `censored`, `post_failed`). |
+| **Unified queue** | The merged, cross-instance list of submissions across ALL statuses (`pending`, `censored`, `posting`, `post_failed`, `rejected`, `posted`) — mirrors the Tweetfess instance queue, where "Semua" shows everything. |
 
 ### 5.2 Assumptions
 
@@ -222,9 +222,9 @@ Priorities: **P0** = MVP must-have; **P1** = MVP nice-to-have (cuttable); **P2**
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-D1 | Merged list of submissions in reviewable states (`pending`, `censored`, `post_failed`) from all enabled instances, newest first. Each row shows: instance badge (name + color), submitter (username, display name, avatar via instance-signed URL), message text (full text in expandable), image thumbnail when present (instance-signed URL), raw `filterReasons` (admin-visible, with matched keyword), `nsfwStatus`, status chip, age ("3 mnt lalu"). | P0 |
+| FR-D1 | Merged list of submissions across ALL statuses (`pending`, `censored`, `posting`, `post_failed`, `rejected`, `posted`) from all enabled instances, newest first — "Semua" shows everything like the Tweetfess queue (rows in `posting`/`posted` are read-only; actions stay per-status). Each row shows: instance badge (name + color), submitter (username, display name, avatar via instance-signed URL), message text (full text in expandable), image thumbnail when present (instance-signed URL), raw `filterReasons` (admin-visible, with matched keyword), `nsfwStatus`, status chip, age ("3 mnt lalu"). | P0 |
 | FR-D2 | Data source: `GET /api/submissions?status=…&page=&limit=` per instance (limit 50 for MVP), merged client-side by `createdAt` desc. "Load more" appends the next page per instance. | P0 |
-| FR-D3 | Filters: status tabs (all / pending / censored / post_failed), instance multi-select, free-text search (delegated per-instance via the API's `search` param). | P0 |
+| FR-D3 | Filters: status tabs (all / pending / censored / post_failed / rejected / posting / posted — `all` passes straight through to the instance contract's own default list filter and spans every status), instance multi-select, free-text search (delegated per-instance via the API's `search` param). | P0 |
 | FR-D4 | **Approve** (`PATCH /api/submissions/[id]` with `{"status":"approved"}`) with all three success shapes handled distinctly: `auto-posted` (posted now — show tweet link), `queued` (deferred with `deferReason` — show the instance's message), `error` (approved but post failed — show error + keep row visible as post_failed). | P0 |
 | FR-D5 | **Reject** (`PATCH` with `{"status":"rejected"}`); display the `refund` outcome (`refunded` / `no-spend` / `over-balance` / absent) when the instance includes it. | P0 |
 | FR-D6 | **Retry post** (`POST /api/submissions/[id]/post`) for `post_failed` and `pending` rows. | P1 |

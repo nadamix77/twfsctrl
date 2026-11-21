@@ -8,18 +8,27 @@
 
 import { callInstance } from './instance-client'
 import type { ResolvedInstance } from './registry'
-import type { InstanceQuickAction, QueueAction, QueueActionResponse, QuickActionResponse } from './types'
+import type {
+  InstanceQuickAction,
+  QueueAction,
+  QueueActionPayload,
+  QueueActionResponse,
+  QuickActionResponse,
+} from './types'
 
 function actionError(call: { ok: false; error: string; status: number }): QueueActionResponse & QuickActionResponse {
   return { ok: false, status: call.status, body: null, error: call.error }
 }
 
 /** Execute one moderation action against one instance submission.
- *  Never throws; returns the raw instance status + body. */
+ *  Never throws; returns the raw instance status + body. `payload` carries
+ *  the request body for the two body-carrying verbs: `edit` (new message
+ *  text, PUT semantics) and `censor` (region list, POST …/censor). */
 export async function performQueueAction(
   instance: ResolvedInstance,
   submissionId: string,
   action: QueueAction,
+  payload?: QueueActionPayload,
 ): Promise<QueueActionResponse> {
   const target = { key: instance.id, baseUrl: instance.baseUrl, password: instance.password ?? '' }
   const id = encodeURIComponent(submissionId)
@@ -48,6 +57,20 @@ export async function performQueueAction(
       break
     case 'delete':
       call = await callInstance(target, `/api/submissions/${id}`, { method: 'DELETE' })
+      break
+    case 'edit':
+      call = await callInstance(target, `/api/submissions/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: payload?.message ?? '' }),
+      })
+      break
+    case 'censor':
+      call = await callInstance(target, `/api/submissions/${id}/censor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regions: payload?.regions ?? [] }),
+      })
       break
     default:
       return { ok: false, status: 0, body: null, error: 'Aksi tidak dikenal' }
